@@ -138,13 +138,14 @@ class Raytracing():
 
     def plot_X_Z_data(self,data,colorbar_label='',title=None):
         XX,ZZ = np.meshgrid(self.x,self.z,indexing='ij')
-        plt.figure()
-        plt.title(title)
-        plt.pcolormesh(XX/constants.au,ZZ/constants.au,data,shading='auto')
-        plt.xlabel('x [au]')
-        plt.ylabel('z [au]')
-        plt.colorbar(label=colorbar_label)
-        plt.axes().set_aspect('equal')
+        fig,ax = plt.subplots()
+        ax.set_title(title)
+        im = ax.pcolormesh(XX/constants.au,ZZ/constants.au,data,shading='auto')
+        ax.set_xlabel('x [au]')
+        ax.set_ylabel('z [au]')
+        cbar = fig.colorbar(im,ax=ax,label=colorbar_label)
+        cbar.ax.set_ylabel(ylabel=colorbar_label)
+        ax.set_aspect('equal')
         
     def plot_mom0(self,title=None):
         mom0 = np.trapz(self.cube,self.v,axis=2) #W/m2/sr
