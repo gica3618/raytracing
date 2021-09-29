@@ -105,13 +105,6 @@ class Raytracing():
             V_R = self.velocity_field(x=X_prime,y=Y_prime,z=Z_prime)[1]\
                    * np.sin(self.inclination)
             NU_R = self.compute_nu(V_R)
-            # #spontaneous transitions/s/m3:
-            # transition_density = n_x_yi_z*upper_level_fraction*self.transition.A21
-            # shifted_phi_v = self.transition.line_profile.phi_v(self.V-V_R)
-            # #intensity in W/m**2/(m/s)/sr at position x,z:
-            # intensity = (transition_density * constants.h*self.NU * self.dy[i]
-            #              *shifted_phi_v / (4*np.pi))
-            # self.cube += intensity*np.exp(-self.tau_nu)
             #column densities in particles/m2:
             N1 = n_x_yi_z * lower_level_fraction * self.dy[i]
             N2 = n_x_yi_z * upper_level_fraction * self.dy[i]
@@ -121,6 +114,7 @@ class Raytracing():
             assert np.all(tau_nu_i >= -self.optical_depth_epsilon),\
                 'something strage is going on with the optical depth calculation:'+\
                 ' min tau_nu: {:g}'.format(np.min(tau_nu_i))
+            #intensity in W/m**2/(m/s)/sr at position x,z:
             intensity = B_nu(nu=self.transition.nu0,T=T_ex_x_yi_z)*(1-np.exp(-tau_nu_i)) #W/m/Hz/sr
             intensity *= self.transition.nu0/constants.c
             self.cube += intensity*np.exp(-self.tau_nu)
