@@ -17,6 +17,11 @@ def compute_spatial_interval(a):
     return np.hstack(intervals)
 
 
+def B_nu(T,nu):
+    return 2*constants.h*nu**3/constants.c**2\
+                 * (np.exp(constants.h*nu/(constants.k*T))-1)**-1
+
+
 class Raytracing():
 
     '''convention: line of sight is along y-axis,i.e. the observers looks along the
@@ -73,7 +78,7 @@ class Raytracing():
                           'y axis not appropriate for optical depth calculation'
 
     def raytrace(self):
-        self.cube = np.zeros((self.x.size,self.z.size,self.v.size))
+        self.cube = np.zeros((self.x.size,self.z.size,self.v.size))#W/m2/(m/s)/sr
         self.tau_nu = np.zeros_like(self.cube)
         if self.check_max_optical_depth_increase:
             #following array is used to alert if the resolution in y-direction is not
@@ -96,17 +101,17 @@ class Raytracing():
                                                 Z=partition_func,T=T_ex_x_yi_z)
             lower_level_fraction = self.transition.low.LTE_level_pop(
                                                 Z=partition_func,T=T_ex_x_yi_z)
-            #spontaneous transitions/s/m3:
-            transition_density = n_x_yi_z*upper_level_fraction*self.transition.A21
             #the radial velocity, again evaluated at the prime coordinates
             V_R = self.velocity_field(x=X_prime,y=Y_prime,z=Z_prime)[1]\
                    * np.sin(self.inclination)
             NU_R = self.compute_nu(V_R)
-            shifted_phi_v = self.transition.line_profile.phi_v(self.V-V_R)
-            #intensity in W/m**2/(m/s)/sr at position x,z:
-            intensity = (transition_density * constants.h*self.NU * self.dy[i]
-                         *shifted_phi_v / (4*np.pi))
-            self.cube += intensity*np.exp(-self.tau_nu)
+            # #spontaneous transitions/s/m3:
+            # transition_density = n_x_yi_z*upper_level_fraction*self.transition.A21
+            # shifted_phi_v = self.transition.line_profile.phi_v(self.V-V_R)
+            # #intensity in W/m**2/(m/s)/sr at position x,z:
+            # intensity = (transition_density * constants.h*self.NU * self.dy[i]
+            #              *shifted_phi_v / (4*np.pi))
+            # self.cube += intensity*np.exp(-self.tau_nu)
             #column densities in particles/m2:
             N1 = n_x_yi_z * lower_level_fraction * self.dy[i]
             N2 = n_x_yi_z * upper_level_fraction * self.dy[i]
@@ -116,6 +121,9 @@ class Raytracing():
             assert np.all(tau_nu_i >= -self.optical_depth_epsilon),\
                 'something strage is going on with the optical depth calculation:'+\
                 ' min tau_nu: {:g}'.format(np.min(tau_nu_i))
+            intensity = B_nu(nu=self.transition.nu0,T=T_ex_x_yi_z)*(1-np.exp(-tau_nu_i)) #W/m/Hz/sr
+            intensity *= self.transition.nu0/constants.c
+            self.cube += intensity*np.exp(-self.tau_nu)
             self.tau_nu += tau_nu_i
             if self.check_max_optical_depth_increase:
                 tau_nu_change = self.tau_nu-previous_tau_nu

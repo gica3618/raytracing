@@ -38,9 +38,9 @@ def velocity_field(x,y,z):
     v0 = np.sqrt(constants.G*M/r)
     phi = np.arctan2(y,x)
     return [-v0*np.sin(phi),v0*np.cos(phi),np.zeros_like(r)]
-data_filepath = '/home/gianni/Desktop/Applications/LAMDA_database_files/c+.dat'
+data_filepath = 'c+.dat'
 mole = molecule.EmittingMolecule.from_LAMDA_datafile(
-                 data_filepath=data_filepath,line_profile_cls=line_profile_cls,
+                 datafilepath=data_filepath,line_profile_cls=line_profile_cls,
                  width_v=width_v)
 transition_name = '1-0'
 zsym = False

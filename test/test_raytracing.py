@@ -16,7 +16,7 @@ import raytracing
 from scipy import constants
 
 import sys
-sys.path.append('/home/cataldi/Applications/pythonradex')
+sys.path.append('/home/gianni/science/projects/code/pythonradex')
 from pythonradex import molecule,atomic_transition
 x = np.linspace(-100,100,50)*constants.au
 y = x.copy()
@@ -96,6 +96,7 @@ class TestRaytracing(unittest.TestCase):
         up = trans.up
         upper_level_pop = up.g*np.exp(-up.E/(constants.k*T0))/Z
         expected_flux = upper_level_pop*N*trans.A21*trans.Delta_E/(4*np.pi*self.d**2)
+        print(flux,expected_flux)
         self.assertTrue(np.isclose(flux,expected_flux,rtol=1e-2,atol=0))
 
     def test_transition_selection(self):
