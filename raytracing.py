@@ -119,8 +119,9 @@ class Raytracing():
             self.tau_nu += tau_nu_i
             if self.check_max_optical_depth_increase:
                 tau_nu_change = self.tau_nu-previous_tau_nu
+                max_tau_nu_change = np.max(tau_nu_change)
                 assert np.all(tau_nu_change < self.max_optical_depth_increase),\
-                    'resolution of y-axis not sufficient; optical depth increasing too rapidly'
+                    f'resolution of y-axis not sufficient; optical depth increasing too rapidly (max tau nu change: {max_tau_nu_change})'
                 previous_tau_nu = self.tau_nu.copy()
             if self.verbose:
                 print('current maximum optical depth: {:g}'.format(np.max(self.tau_nu)))

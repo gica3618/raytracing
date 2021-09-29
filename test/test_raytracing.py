@@ -16,7 +16,7 @@ import raytracing
 from scipy import constants
 
 import sys
-sys.path.append('/home/gianni/science/projects/code/pythonradex')
+sys.path.append('/home/cataldi/Applications/pythonradex')
 from pythonradex import molecule,atomic_transition
 x = np.linspace(-100,100,50)*constants.au
 y = x.copy()
@@ -42,9 +42,8 @@ def velocity_field(x,y,z):
     v0 = np.sqrt(constants.G*M/r)
     phi = np.arctan2(y,x)
     return [-v0*np.sin(phi),v0*np.cos(phi),np.zeros_like(r)]
-data_filepath = '/home/gianni/Desktop/Applications/LAMDA_database_files/c+.dat'
 mole = molecule.EmittingMolecule.from_LAMDA_datafile(
-                 data_filepath=data_filepath,line_profile_cls=line_profile_cls,
+                 datafilepath='c+.dat',line_profile_cls=line_profile_cls,
                  width_v=width_v)
 transition_name = '1-0'
 zsym = False
