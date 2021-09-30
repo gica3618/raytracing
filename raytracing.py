@@ -34,11 +34,17 @@ class Raytracing():
     max_optical_depth_increase = 0.2
     optical_depth_epsilon = 1e-10
 
-    def __init__(self,grid,Tex,number_density,velocity_field,atom,transition_name,
-                 zsym=False,inclination=np.pi/2,verbose=False,
+    def __init__(self,grid,number_density,velocity_field,atom,transition_name,
+                 T_LTE=None,x1=None,x2=None,zsym=False,inclination=np.pi/2,verbose=False,
                  check_max_optical_depth_increase=False):
         self.grid = grid
-        self.Tex = Tex
+        self.T_LTE = T_LTE
+        self.x1 = x1
+        self.x2 = x2
+        if self.T_LTE is None:
+            assert self.x1 is not None and self.x2 is not None
+        else:
+            assert self.x1 is None and self.x2 is None
         self.number_density = number_density
         self.velocity_field = velocity_field
         self.atom = atom
@@ -95,12 +101,19 @@ class Raytracing():
             Y_prime = y_i*np.sin(self.inclination) + self.Z*np.cos(self.inclination)
             Z_prime = -y_i*np.cos(self.inclination) + self.Z*np.sin(self.inclination)
             n_x_yi_z = self.number_density(x=X_prime,y=Y_prime,z=Z_prime)
-            T_ex_x_yi_z = self.Tex(x=X_prime,y=Y_prime,z=Z_prime)
-            partition_func = self.atom.Z(T_ex_x_yi_z)
-            upper_level_fraction = self.transition.up.LTE_level_pop(
-                                                Z=partition_func,T=T_ex_x_yi_z)
-            lower_level_fraction = self.transition.low.LTE_level_pop(
-                                                Z=partition_func,T=T_ex_x_yi_z)
+            if self.T_LTE is not None:
+                T_x_yi_z = self.T_LTE(x=X_prime,y=Y_prime,z=Z_prime)
+                partition_func = self.atom.Z(T_x_yi_z)
+                upper_level_fraction = self.transition.up.LTE_level_pop(
+                                                    Z=partition_func,T=T_x_yi_z)
+                lower_level_fraction = self.transition.low.LTE_level_pop(
+                                                    Z=partition_func,T=T_x_yi_z)
+                Tex = T_x_yi_z
+            else:
+                upper_level_fraction = self.x2(x=X_prime,y=Y_prime,z=Z_prime)
+                lower_level_fraction = self.x1(x=X_prime,y=Y_prime,z=Z_prime)
+                Tex = self.transition.Tex(x1=lower_level_fraction,
+                                          x2=upper_level_fraction)
             #the radial velocity, again evaluated at the prime coordinates
             V_R = self.velocity_field(x=X_prime,y=Y_prime,z=Z_prime)[1]\
                    * np.sin(self.inclination)
@@ -115,7 +128,7 @@ class Raytracing():
                 'something strage is going on with the optical depth calculation:'+\
                 ' min tau_nu: {:g}'.format(np.min(tau_nu_i))
             #intensity in W/m**2/(m/s)/sr at position x,z:
-            intensity = B_nu(nu=self.transition.nu0,T=T_ex_x_yi_z)*(1-np.exp(-tau_nu_i)) #W/m/Hz/sr
+            intensity = B_nu(nu=self.transition.nu0,T=Tex)*(1-np.exp(-tau_nu_i)) #W/m/Hz/sr
             intensity *= self.transition.nu0/constants.c
             self.cube += intensity*np.exp(-self.tau_nu)
             self.tau_nu += tau_nu_i
@@ -197,7 +210,7 @@ if __name__ == '__main__':
     M = 2e30
     line_profile_cls = atomic_transition.GaussianLineProfile
     width_v = 1.5*constants.kilo
-    def Tex(x,y,z):
+    def T(x,y,z):
         return np.ones_like(x*y*z)*50
     def number_density(x,y,z):
         r = np.sqrt(x**2+y**2)
@@ -220,7 +233,7 @@ if __name__ == '__main__':
     zsym = False
     inclination = np.pi/2
     verbose = True
-    raytrace = Raytracing(grid=grid,Tex=Tex,number_density=number_density,
+    raytrace = Raytracing(grid=grid,T=T,number_density=number_density,
                           velocity_field=velocity_field,atom=mole,
                           transition_name=transition_name,zsym=zsym,
                           inclination=inclination,verbose=verbose)

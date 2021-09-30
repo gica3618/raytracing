@@ -31,7 +31,7 @@ width_v = 1.5*constants.kilo
 T0 = 50
 distance = 10*constants.parsec
 n0_range = np.logspace(0,6,10)/constants.centi**3
-def Tex(x,y,z):
+def T_LTE(x,y,z):
     return np.ones_like(x*y*z)*T0
 def velocity_field(x,y,z):
     r = np.sqrt(x**2+y**2)
@@ -61,7 +61,7 @@ for n0 in n0_range:
         n = n0*np.exp(-(r-r0)**2/(2*sigma**2))*np.exp(-z**2/(2*H**2))\
             + 4*n0*np.exp(-r_blob**2/(2*sigma_blob**2))*np.exp(-z**2/(2*H**2))
         return n
-    kwargs = {'grid':grid,'Tex':Tex,'number_density':number_density,
+    kwargs = {'grid':grid,'T_LTE':T_LTE,'number_density':number_density,
               'velocity_field':velocity_field,'atom':mole,
               'transition_name':transition_name,'zsym':zsym,
               'inclination':inclination,'verbose':verbose}

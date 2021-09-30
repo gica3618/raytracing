@@ -27,7 +27,7 @@ M = 2e30
 line_profile_cls = atomic_transition.GaussianLineProfile
 width_v = 1.5*constants.kilo
 T0 = 50
-def Tex(x,y,z):
+def T_LTE(x,y,z):
     return np.ones_like(x*y*z)*T0
 def number_density(x,y,z):
     r = np.sqrt(x**2+y**2)
@@ -49,10 +49,10 @@ transition_name = '1-0'
 zsym = False
 inclination = np.pi/2
 verbose = False
-kwargs = {'grid':grid,'Tex':Tex,'number_density':number_density,
-          'velocity_field':velocity_field,'atom':mole,
-          'transition_name':transition_name,'zsym':zsym,
-          'inclination':inclination,'verbose':verbose}
+std_kwargs = {'grid':grid,'T_LTE':T_LTE,'number_density':number_density,
+              'velocity_field':velocity_field,'atom':mole,
+              'transition_name':transition_name,'zsym':zsym,
+              'inclination':inclination,'verbose':verbose}
 
 
 class TestRaytracing(unittest.TestCase):
@@ -68,10 +68,19 @@ class TestRaytracing(unittest.TestCase):
         for bad_array in bad_arrays:
              self.assertRaises(AssertionError,raytracing.compute_spatial_interval,bad_array)
 
+    def test_init_T_x1_x2(self):
+        T_None_kwargs = std_kwargs.copy()
+        T_None_kwargs['T_LTE'] = None
+        x1_x2_not_None_kwargs = std_kwargs.copy()
+        x1_x2_not_None_kwargs['x1'] = 1
+        x1_x2_not_None_kwargs['x2'] = 1
+        for k in (T_None_kwargs,x1_x2_not_None_kwargs):
+            self.assertRaises(AssertionError,raytracing.Raytracing,**k)
+
     def test_inclination_optically_thin(self):
         test_inclinations = [0,np.pi/8,np.pi/4,np.pi/2]
         total_fluxes = np.empty(len(test_inclinations))
-        test_kwargs = kwargs.copy()
+        test_kwargs = std_kwargs.copy()
         for i,inc in enumerate(test_inclinations):
             test_kwargs['inclination'] = inc
             raytrace = raytracing.Raytracing(**test_kwargs)
@@ -81,7 +90,7 @@ class TestRaytracing(unittest.TestCase):
         self.assertTrue(np.allclose(total_fluxes,total_fluxes[0]))
 
     def test_optically_thin_flux(self):
-        test_kwargs = kwargs.copy()
+        test_kwargs = std_kwargs.copy()
         def thin_n(x,y,z):
             return number_density(x=x,y=y,z=z)/1e4
         test_kwargs['number_density'] = thin_n
@@ -100,5 +109,28 @@ class TestRaytracing(unittest.TestCase):
         self.assertTrue(np.isclose(flux,expected_flux,rtol=1e-2,atol=0))
 
     def test_transition_selection(self):
-        raytrace = raytracing.Raytracing(**kwargs)
+        raytrace = raytracing.Raytracing(**std_kwargs)
         self.assertEqual(raytrace.transition.name,transition_name)
+
+    def test_level_population_input(self):
+        T_raytracing = raytracing.Raytracing(**std_kwargs)
+        partition_func = mole.Z(T0)
+        upper_level_fraction = T_raytracing.transition.up.LTE_level_pop(
+                                                    Z=partition_func,T=T0)
+        lower_level_fraction = T_raytracing.transition.low.LTE_level_pop(
+                                                    Z=partition_func,T=T0)
+        def x1(x,y,z):
+            return np.ones_like(x*y*z)*lower_level_fraction
+        def x2(x,y,z):
+            return np.ones_like(x*y*z)*upper_level_fraction
+        x1_x2_kwargs = std_kwargs.copy()
+        x1_x2_kwargs['T_LTE'] = None
+        x1_x2_kwargs['x1'] = x1
+        x1_x2_kwargs['x2'] = x2
+        x1_x2_raytracing = raytracing.Raytracing(**x1_x2_kwargs)
+        fluxes = []
+        for raytrace in (T_raytracing,x1_x2_raytracing):
+            raytrace.raytrace()
+            raytrace.compute_spec()
+            fluxes.append(raytrace.total_flux(distance=self.d))
+        self.assertTrue(np.allclose(fluxes,fluxes[0],rtol=1e-5,atol=0))
