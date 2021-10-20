@@ -66,7 +66,8 @@ class TestRaytracing(unittest.TestCase):
         self.assertTrue(np.all(da==expected_da))
         bad_arrays = [np.array((-2,3,3,4)),np.array((3,2,4,5,6,7)),np.array((2,1,0,-2))]
         for bad_array in bad_arrays:
-             self.assertRaises(AssertionError,raytracing.compute_spatial_interval,bad_array)
+              self.assertRaises(AssertionError,raytracing.compute_spatial_interval,
+                                bad_array)
 
     def test_init_T_x1_x2(self):
         T_None_kwargs = std_kwargs.copy()
@@ -112,6 +113,17 @@ class TestRaytracing(unittest.TestCase):
         raytrace = raytracing.Raytracing(**std_kwargs)
         self.assertEqual(raytrace.transition.name,transition_name)
 
+    def get_x1_x2_kwargs(self,const_x1,const_x2):
+        def x1(x,y,z):
+            return np.ones_like(x*y*z)*const_x1
+        def x2(x,y,z):
+            return np.ones_like(x*y*z)*const_x2
+        x1_x2_kwargs = std_kwargs.copy()
+        x1_x2_kwargs['T_LTE'] = None
+        x1_x2_kwargs['x1'] = x1
+        x1_x2_kwargs['x2'] = x2
+        return x1_x2_kwargs
+
     def test_level_population_input(self):
         T_raytracing = raytracing.Raytracing(**std_kwargs)
         partition_func = mole.Z(T0)
@@ -119,14 +131,8 @@ class TestRaytracing(unittest.TestCase):
                                                     Z=partition_func,T=T0)
         lower_level_fraction = T_raytracing.transition.low.LTE_level_pop(
                                                     Z=partition_func,T=T0)
-        def x1(x,y,z):
-            return np.ones_like(x*y*z)*lower_level_fraction
-        def x2(x,y,z):
-            return np.ones_like(x*y*z)*upper_level_fraction
-        x1_x2_kwargs = std_kwargs.copy()
-        x1_x2_kwargs['T_LTE'] = None
-        x1_x2_kwargs['x1'] = x1
-        x1_x2_kwargs['x2'] = x2
+        x1_x2_kwargs = self.get_x1_x2_kwargs(const_x1=lower_level_fraction,
+                                              const_x2=upper_level_fraction)
         x1_x2_raytracing = raytracing.Raytracing(**x1_x2_kwargs)
         fluxes = []
         for raytrace in (T_raytracing,x1_x2_raytracing):
@@ -134,3 +140,16 @@ class TestRaytracing(unittest.TestCase):
             raytrace.compute_spec()
             fluxes.append(raytrace.total_flux(distance=self.d))
         self.assertTrue(np.allclose(fluxes,fluxes[0],rtol=1e-5,atol=0))
+
+    def test_negative_tau(self):
+        std_raytracing = raytracing.Raytracing(**std_kwargs)
+        partition_func = mole.Z(T0)
+        negative_Tex = -20
+        x1 = std_raytracing.transition.low.LTE_level_pop(Z=partition_func,T=negative_Tex)
+        x2 = std_raytracing.transition.up.LTE_level_pop(Z=partition_func,T=negative_Tex)
+        x1_x2_kwargs = self.get_x1_x2_kwargs(const_x1=x1,const_x2=x2)
+        neg_tau_not_allowed = raytracing.Raytracing(**x1_x2_kwargs,allow_negative_tau=False)
+        neg_tau_allowed = raytracing.Raytracing(**x1_x2_kwargs,allow_negative_tau=True)
+        neg_tau_allowed.raytrace()
+        self.assertRaises(AssertionError,neg_tau_not_allowed.raytrace)
+        
