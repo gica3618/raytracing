@@ -36,7 +36,7 @@ class Raytracing():
 
     def __init__(self,grid,number_density,velocity_field,atom,transition_name,
                  T_LTE=None,x1=None,x2=None,zsym=False,inclination=np.pi/2,verbose=False,
-                 check_max_optical_depth_increase=False):
+                 check_max_optical_depth_increase=False,allow_negative_tau=False):
         self.grid = grid
         self.T_LTE = T_LTE
         self.x1 = x1
@@ -57,6 +57,7 @@ class Raytracing():
             assert self.inclination == np.pi/2, 'zsym not allowed for inclined disk'
         self.verbose = verbose
         self.check_max_optical_depth_increase = check_max_optical_depth_increase
+        self.allow_negative_tau = allow_negative_tau
         self.grid_setup()
 
     def compute_nu(self,v):
@@ -124,9 +125,10 @@ class Raytracing():
             Delta_NU = self.NU - NU_R
             tau_nu_i = self.transition.tau_nu(N1=N1,N2=N2,
                                               nu=self.transition.nu0+Delta_NU)
-            assert np.all(tau_nu_i >= -self.optical_depth_epsilon),\
-                'something strage is going on with the optical depth calculation:'+\
-                ' min tau_nu: {:g}'.format(np.min(tau_nu_i))
+            if not self.allow_negative_tau:
+                assert np.all(tau_nu_i >= 0),\
+                    'something strage is going on with the optical depth calculation:'+\
+                    ' min tau_nu: {:g}'.format(np.min(tau_nu_i))
             #intensity in W/m**2/(m/s)/sr at position x,z:
             intensity = B_nu(nu=self.transition.nu0,T=Tex)*(1-np.exp(-tau_nu_i)) #W/m/Hz/sr
             intensity *= self.transition.nu0/constants.c
