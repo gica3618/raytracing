@@ -24,29 +24,30 @@ x = np.linspace(-120,120,150)*constants.au
 y = np.linspace(-120,120,200)*constants.au
 z = np.linspace(-70,70,100)*constants.au
 v = np.linspace(-15,15,40)*constants.kilo
-grid = {'x':x,'y':y,'z':z,'v':v}
+grid = {'x_sky':x,'y_sky':y,'z_sky':z,'v':v}
 M = 2e30
 line_profile_cls = atomic_transition.GaussianLineProfile
 width_v = 1.5*constants.kilo
 T0 = 50
 distance = 10*constants.parsec
 n0_range = np.logspace(0,6,10)/constants.centi**3
-def T_LTE(x,y,z):
+def T_Boltzmann(x,y,z):
     return np.ones_like(x*y*z)*T0
-def velocity_field(x,y,z):
+def velocity_yz(x,y,z):
     r = np.sqrt(x**2+y**2)
     v0 = np.sqrt(constants.G*M/r)
     phi = np.arctan2(y,x)
-    return [-v0*np.sin(phi),v0*np.cos(phi),np.zeros_like(r)]
+    return [v0*np.cos(phi),np.zeros_like(r)]
 data_filepath = 'c+.dat'
-mole = molecule.EmittingMolecule.from_LAMDA_datafile(
-                 datafilepath=data_filepath,line_profile_cls=line_profile_cls,
+mole = molecule.EmittingMolecule(
+                 datafilepath=data_filepath,line_profile_type='Gaussian',
                  width_v=width_v)
-transition_name = '1-0'
-zsym = False
-inclination = np.radians(60)
+transition_index = 0
+inclination_xyz = np.radians(40)
 verbose = False
 
+
+flux_ratios = []
 for n0 in n0_range:
     print('considering n0={:g} cm-3'.format(n0*constants.centi**3))
     def number_density(x,y,z):
@@ -61,13 +62,12 @@ for n0 in n0_range:
         n = n0*np.exp(-(r-r0)**2/(2*sigma**2))*np.exp(-z**2/(2*H**2))\
             + 4*n0*np.exp(-r_blob**2/(2*sigma_blob**2))*np.exp(-z**2/(2*H**2))
         return n
-    kwargs = {'grid':grid,'T_LTE':T_LTE,'number_density':number_density,
-              'velocity_field':velocity_field,'atom':mole,
-              'transition_name':transition_name,'zsym':zsym,
-              'inclination':inclination,'verbose':verbose}
+    kwargs = {'grid':grid,'T_Boltzmann':T_Boltzmann,'number_density':number_density,
+              'velocity_yz':velocity_yz,'atom':mole,
+              'transition_index':transition_index,
+              'inclination_xyz':inclination_xyz,'verbose':verbose}
     raytrace = raytracing.Raytracing(**kwargs)
     raytrace.raytrace()
-    raytrace.compute_spec()
     raytrace_flux = raytrace.total_flux(distance=distance)
     raytrace_title = 'n0={:g}cm-3, raytrace'.format(n0*constants.centi**3)
     raytrace.plot_max_tau_nu(title=raytrace_title)
@@ -92,7 +92,7 @@ for n0 in n0_range:
     general_img_kwargs = {'nchan':v.size,'velres':np.diff(v)[0],'trans':0,'pxls':200,
                           'imgres':img_res/distance,'distance':distance,
                           'phi':0,'units':'2 4'}
-    images = [pyLime.LimeImage(theta=inclination,filename='test_c+.fits',molI=0,
+    images = [pyLime.LimeImage(theta=inclination_xyz,filename='test_c+.fits',molI=0,
                                **general_img_kwargs),]
     n_threads = 10
     n_solve_iters = 14
@@ -112,8 +112,11 @@ for n0 in n0_range:
     lime_flux_image.plot_pv(title=lime_title)
     lime_flux = lime_flux_image.total_flux()
     print('flux from LIME (LTE mode): {:g} W/m2'.format(lime_flux))
-    print('flux ratio: {:g}'.format(raytrace_flux/lime_flux))
+    flux_ratio = raytrace_flux/lime_flux
+    flux_ratios.append(flux_ratio)
+    print('flux ratio: {:g}'.format(flux_ratio))
     print('\n')
     lime_tau_image = pyLime.LimeFitsOutputTau('test_c+_Tau.fits')
     lime_tau_image.compute_max_map()
     lime_tau_image.plot_max_map(title=lime_title)
+print(flux_ratios)
