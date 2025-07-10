@@ -34,10 +34,11 @@ class Raytracing():
         number_density (func): A function of x, y and z. It should return
             the number density in units of [1/m3].
         velocity_yz (func): A function of x, y and z. It should return
-            the instrinsic FWHM of the emission line in units of [m/s].
-        FWHM_v (func):  A function of x, y and z. It should return
             a list with two elements. The elements of the list are the
             velocity (in units of [m/s]) in the y and z direction.
+        FWHM_v (func): A function of x, y and z. It should return
+                the intrinsic FWHM of the emission line in units of [m/s]. The
+                intrinsic line profile is assumed to be Gaussian.
         mole (pythonradex.molecule.Molecule): Object containing
             atomic/molecular data. The object is initialised using a datafile
             from the LAMDA database.
@@ -157,7 +158,6 @@ class Raytracing():
         return self.transition.nu0*(1-v/constants.c)
 
     def phi_nu(self,FWHM_nu,nu):
-        #width interpreted as FWHM
         sigma = FWHM_nu/np.sqrt(8*np.log(2))
         norm = 1/(np.sqrt(2*np.pi)*sigma)
         return norm*np.exp(-(nu-self.transition.nu0)**2/(2*sigma**2))
