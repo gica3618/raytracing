@@ -27,7 +27,7 @@ import raytracing
 
 ### Executing the program
 
-Please refer to the example jupyter notebook in the folder [example_notebook](https://github.com/gica3618/raytracing/tree/main/example_notebook).
+Please refer to the [example jupyter notebook](example_notebook/example_notebook.ipynb).
 
 ## Help
 
