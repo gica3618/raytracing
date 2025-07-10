@@ -4,4 +4,5 @@ grid_values.h
 model.c
 test_c+_SI.fits
 test_c+_Tau.fits
-examples/.ipynb_checkpoints
+example_notebook/.ipynb_checkpoints/
+example_notebook/my_model.npz

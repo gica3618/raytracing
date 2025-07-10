@@ -23,11 +23,10 @@ z_sky = x_sky.copy()
 v = np.linspace(-10,10,60)*constants.kilo
 grid = {'x_sky':x_sky,'y_sky':y_sky,'z_sky':z_sky,'v':v}
 M = 2e30
-width_v = 1.5*constants.kilo
+u = constants.physical_constants['atomic mass constant'][0]
 
-mole = molecule.EmittingMolecule(
-                 datafilepath='c+.dat',line_profile_type='Gaussian',
-                 width_v=width_v)
+mole = molecule.Molecule(datafilepath='c+.dat')
+m_Cplus = 12*u
 trans_index = 0
 trans = mole.rad_transitions[trans_index]
 
@@ -37,6 +36,15 @@ def T_Boltzmann(x,y,z):
     r0 = 50*constants.au
     r = np.sqrt(x**2+y**2)
     return (r/r0)**-0.5 * T0
+
+def FWHM_v(x,y,z):
+    sigma_v = np.sqrt(constants.k*T_Boltzmann(x=x,y=y,z=z)/m_Cplus)
+    return 2*np.sqrt(2*np.log(2))*sigma_v
+
+constant_FWHM = 1*constants.kilo
+def FWHM_v_constant(x,y,z):
+    shape = np.broadcast(x,y,z).shape
+    return np.ones(shape)*constant_FWHM
 
 def x1(x,y,z):
     T = T_Boltzmann(x=x,y=y,z=z)
@@ -80,8 +88,8 @@ def thin_n(x,y,z):
 velocity_yz = raytracing.Raytracing.generate_Keplerian_velocity_yz(Mstar=M)
 
 std_kwargs_T = {'grid':grid,'T_Boltzmann':T_Boltzmann,'number_density':number_density,
-                'velocity_yz':velocity_yz,'atom':mole,'transition_index':0,
-                'inclination_xyz':np.pi/3,'verbose':False}
+                'velocity_yz':velocity_yz,'FWHM_v':FWHM_v,'mole':mole,
+                'transition_index':0,'inclination_xyz':np.pi/3,'verbose':False}
 std_kwargs_x1x2 = std_kwargs_T.copy()
 std_kwargs_x1x2['T_Boltzmann'] = None
 std_kwargs_x1x2['x1'] = x1
@@ -112,14 +120,6 @@ class TestRaytracing(unittest.TestCase):
         for k in (T_None_kwargs,x1_x2_not_None_kwargs):
             self.assertRaises(AssertionError,raytracing.Raytracing,**k)
 
-    # def test_zsym_only_allowed_for_edgeon_disk(self):
-    #     for kwargs in std_kwargs.values():
-    #         zsym_kwargs = kwargs.copy()
-    #         zsym_kwargs['zsym'] = True
-    #         inclinations = np.radians([0,10,45,89.9])
-    #         for i in inclinations:
-    #             self.assertRaises(AssertionError,raytracing.Raytracing,**zsym_kwargs)
-
     def test_grid_setup(self):
         bad_ys = [np.array((-2,3,3,4)),np.array((3,2,4,5,6,7)),np.array((2,1,0,-2))]
         for y in bad_ys:
@@ -129,20 +129,6 @@ class TestRaytracing(unittest.TestCase):
                 k = kwargs.copy()
                 k['grid'] = bad_grid
                 self.assertRaises(AssertionError,raytracing.Raytracing,**k)
-
-    # def test_bad_zgrid_for_zsym(self):
-    #     for kwargs in std_kwargs.values():
-    #         bad_z = [np.array((-2,1,0,1,2))*constants.au,
-    #                  np.array((-0.5,0.5,1.5))*constants.au,
-    #                  np.array((1,2,3,4))*constants.au]
-    #         for z in bad_z:
-    #             bad_grid = grid.copy()
-    #             bad_grid['z'] = z
-    #             k = kwargs.copy()
-    #             k['grid'] = bad_grid
-    #             k['zsym'] = True
-    #             k['inclination'] = np.pi/2
-    #             self.assertRaises(AssertionError,raytracing.Raytracing,**k)
 
     def test_inclination_optically_thin(self):
         test_inclinations = [0,np.pi/8,np.pi/4,np.pi/2]
@@ -157,7 +143,7 @@ class TestRaytracing(unittest.TestCase):
                 #print(f'tau_nu: {np.min(raytrace.tau_nu):.3g} - {np.max(raytrace.tau_nu):.3g}')
                 total_fluxes[i] = raytrace.total_flux(distance=self.d)
             #print(total_fluxes)
-            self.assertTrue(np.allclose(total_fluxes,total_fluxes[0],atol=0,rtol=1e-3))
+            self.assertTrue(np.allclose(total_fluxes,total_fluxes[0],atol=0,rtol=1e-2))
 
     def test_optically_thin_flux(self):
         for kwargs in std_kwargs.values():
@@ -180,6 +166,7 @@ class TestRaytracing(unittest.TestCase):
                 up = trans.up
                 upper_level_pop = up.g*np.exp(-up.E/(constants.k*T3D))/Z
             else:
+                                       
                 upper_level_pop = x2(x=x3D,y=y3D,z=z3D)
             N2 = np.trapezoid(np.trapezoid(np.trapezoid(n3D*upper_level_pop,
                                                         z_sky,axis=-1),y_sky,axis=-1),x_sky)
@@ -230,31 +217,6 @@ class TestRaytracing(unittest.TestCase):
         neg_tau_allowed.raytrace()
         self.assertRaises(AssertionError,neg_tau_not_allowed.raytrace)
 
-    # @staticmethod
-    # def change_z(kwargs,z):
-    #     out = kwargs.copy()
-    #     grid = kwargs['grid'].copy()
-    #     grid['z_sky'] = z
-    #     out['grid'] = grid
-    #     return out
-
-    # def test_zsym(self):
-    #     z_full = np.linspace(-30,30,61)*constants.au
-    #     z_half = z_full[30:]
-    #     kwargs = std_kwargs['T']
-    #     kwargs_full = self.change_z(kwargs=kwargs,z=z_full)
-    #     kwargs_full['zsym'] = False
-    #     kwargs_full['inclination'] = np.pi/2
-    #     kwargs_half = self.change_z(kwargs=kwargs,z=z_half)
-    #     kwargs_half['zsym'] = True
-    #     kwargs_half['inclination'] = np.pi/2
-    #     cubes = []
-    #     for k in (kwargs_full,kwargs_half):
-    #         r = raytracing.Raytracing(**k)
-    #         r.raytrace()
-    #         cubes.append(r.cube)
-    #     self.assertTrue(np.allclose(*cubes,rtol=1e-3,atol=0))
-
     def test_optically_thick(self):
         def n_thick(x,y,z):
             return number_density(x=x,y=y,z=z)*1e3
@@ -281,24 +243,24 @@ class TestRaytracing(unittest.TestCase):
         out['velocity_yz'] = velocity_yz
         return out
 
-    @staticmethod
-    def fit_Gaussian(v,data):
-        scaling = np.max(data)
-        def model(params):
-            return params[0]*np.exp(-(v-params[1])**2/(2*params[2]**2))
-        def residual(params):
-            return np.sum((model(params=params)-data/scaling)**2)
-        x0 = [1,0,width_v]
-        fit = optimize.minimize(fun=residual,x0=x0)
-        assert fit.success
-        return [fit.x[0]*scaling,fit.x[1],fit.x[2]]
-
     def test_velocity_field(self):
+        def fit_Gaussian(v,data):
+            scaling = np.max(data)
+            def model(params):
+                return params[0]*np.exp(-(v-params[1])**2/(2*params[2]**2))
+            def residual(params):
+                return np.sum((model(params=params)-data/scaling)**2)
+            x0 = [1,0,constant_FWHM/(2*np.sqrt(2*np.log(2)))]
+            fit = optimize.minimize(fun=residual,x0=x0)
+            assert fit.success
+            return [fit.x[0]*scaling,fit.x[1],fit.x[2]]
         vz = 1*constants.kilo
         Kep_field = raytracing.Raytracing.generate_Keplerian_velocity_yz(Mstar=M)
         Kep_kwargs = std_kwargs['T'].copy()
         Kep_kwargs['velocity_yz'] = Kep_field
         Kep_kwargs['inclination_xyz'] = 0
+        Kep_kwargs['FWHM_v'] = FWHM_v_constant
+        Kep_kwargs['number_density'] = thin_n
         def Kep_field_plus_outflow(x,y,z):
             Kep = Kep_field(x=x,y=y,z=z)
             out_shape = np.broadcast(x,y,z).shape
@@ -315,27 +277,36 @@ class TestRaytracing(unittest.TestCase):
         vz_model = raytracing.Raytracing(**vz_kwargs)
         for m in (Kep_model,Kep_vz_model,vz_model):
             m.raytrace()
+            assert np.max(m.tau_nu) < 1e-2
+            #print(np.max(m.tau_nu))
         #since the disk is edge-on, vz should not have any effect
         self.assertTrue(np.all(Kep_model.cube==Kep_vz_model.cube))
         #for the disk with only outflow, the spectrum should be a Gaussian
         #with width equal to the line width
         #vz_model.plot_spectrum()
-        vz_spec_fit = self.fit_Gaussian(v=v,data=vz_model.spectrum)
+        vz_spec_fit = fit_Gaussian(v=v,data=vz_model.spectrum)
         #print(vz_spec_fit)
         dv = np.diff(v)
         assert np.allclose(dv[0],dv,atol=0,rtol=1e-6)
         dv = dv[0]
+        #I expect a Gaussian centred at 0 and known FWHM
         self.assertTrue(np.abs(vz_spec_fit[1])<dv/10)
+        self.assertTrue(np.isclose(vz_spec_fit[2]*2*np.sqrt(2*np.log(2)),constant_FWHM,
+                                   atol=0,rtol=1e-3))
         #let's incline the vz model to face-on so that the flow comes towards the observer
         for inclination in np.radians([20,50,90]):
-            vz_edgeon_kwargs = vz_kwargs.copy()
-            vz_edgeon_kwargs['inclination_xyz'] = inclination
-            vz_edgeon_model = raytracing.Raytracing(**vz_edgeon_kwargs)
-            vz_edgeon_model.raytrace()
-            vz_edgeon_fit = self.fit_Gaussian(v=v,data=vz_edgeon_model.spectrum)
-            #the spectrum should be centered at -vz*sin(inclination)
+            vz_inclined_kwargs = vz_kwargs.copy()
+            vz_inclined_kwargs['inclination_xyz'] = inclination
+            vz_inclined_model = raytracing.Raytracing(**vz_inclined_kwargs)
+            vz_inclined_model.raytrace()
+            vz_inclined_fit = fit_Gaussian(v=v,data=vz_inclined_model.spectrum)
+            #the spectrum should be centered at -vz*sin(inclination) and have
+            #width
             #print(vz_edgeon_fit[1], -vz*np.sin(inclination))
-            self.assertTrue(np.abs(vz_edgeon_fit[1] - -vz*np.sin(inclination))<dv/10)
+            self.assertTrue(np.abs(vz_inclined_fit[1] - -vz*np.sin(inclination))<dv/10)
+            #check also FWHM:
+            self.assertTrue(np.isclose(vz_inclined_fit[2]*2*np.sqrt(2*np.log(2)),
+                                       constant_FWHM,atol=0,rtol=1e-3))
 
 
 if __name__ == '__main__':

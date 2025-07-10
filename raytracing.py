@@ -34,15 +34,18 @@ class Raytracing():
         number_density (func): A function of x, y and z. It should return
             the number density in units of [1/m3].
         velocity_yz (func): A function of x, y and z. It should return
+            the instrinsic FWHM of the emission line in units of [m/s].
+        FWHM_v (func):  A function of x, y and z. It should return
             a list with two elements. The elements of the list are the
             velocity (in units of [m/s]) in the y and z direction.
-        atom (pythonradex.molecule.EmittingMolecule): Object containing
+        mole (pythonradex.molecule.Molecule): Object containing
             atomic/molecular data. The object is initialised using a datafile
             from the LAMDA database.
         transition_index (int): The index of the transition to be considered,
             based on the list of transitions in the LAMDA file. The first
             transition has index 0.
-        inclination_xyz (float): Inclination angle in units of [rad]. It is the
+        inclination_xyz (float): Inclination angle in un
+                 its of [rad]. It is the
             angle between y and y_sky. Defaults to 0, i.e. x=x_sky, y=y_sky,
             z=z_sky.
         T_Boltzmann (func):  A function of x, y and z. It should return
@@ -103,7 +106,7 @@ class Raytracing():
 
     max_optical_depth_increase = 0.2
 
-    def __init__(self,grid,number_density,velocity_yz,atom,transition_index,
+    def __init__(self,grid,number_density,velocity_yz,FWHM_v,mole,transition_index,
                  inclination_xyz=0,T_Boltzmann=None,x1=None,x2=None,
                  verbose=False,check_max_optical_depth_increase=False,
                  allow_negative_tau=False):
@@ -117,12 +120,10 @@ class Raytracing():
             assert self.x1 is None and self.x2 is None
         self.number_density = number_density
         self.velocity_yz = velocity_yz
-        self.atom = atom
-        self.transition = self.atom.rad_transitions[transition_index]
-        # self.zsym = zsym
+        self.FWHM_v = FWHM_v
+        self.mole = mole
+        self.transition = self.mole.rad_transitions[transition_index]
         self.inclination_xyz = inclination_xyz
-        # if self.zsym:
-        #     assert self.inclination_xyz == np.pi/2, 'zsym only allowed for i=90 deg'
         self.verbose = verbose
         self.check_max_optical_depth_increase = check_max_optical_depth_increase
         self.allow_negative_tau = allow_negative_tau
@@ -155,6 +156,19 @@ class Raytracing():
     def compute_nu(self,v):
         return self.transition.nu0*(1-v/constants.c)
 
+    def phi_nu(self,FWHM_nu,nu):
+        #width interpreted as FWHM
+        sigma = FWHM_nu/np.sqrt(8*np.log(2))
+        norm = 1/(np.sqrt(2*np.pi)*sigma)
+        return norm*np.exp(-(nu-self.transition.nu0)**2/(2*sigma**2))
+
+    def compute_tau_nu(self,N1,N2,nu,FWHM_nu):
+        A21 = self.transition.A21
+        g_up = self.transition.up.g
+        g_low = self.transition.low.g
+        phi_nu = self.phi_nu(FWHM_nu=FWHM_nu,nu=nu)
+        return constants.c**2/(8*np.pi*nu**2)*A21*phi_nu*(g_up/g_low*N1-N2)
+
     def grid_setup(self):
         self.v = self.grid['v']
         self.V = self.v[np.newaxis,np.newaxis,:]
@@ -172,9 +186,6 @@ class Raytracing():
         self.Z = self.z_sky[np.newaxis,:,np.newaxis]
         self.dz_sky = self.compute_spatial_interval(self.z_sky)
         self.dZ_sky = self.dz_sky[np.newaxis,:,np.newaxis]
-        # if self.zsym:
-        #     assert (0 in self.z_sky) and np.all(self.z_sky>=0),\
-        #              'Error: z axis not appropriate for symmetric z calculation'
 
     def raytrace(self):
         '''Raytrace the model.'''
@@ -203,7 +214,7 @@ class Raytracing():
             n_x_yi_z = self.number_density(x=X,y=Y,z=Z)
             if self.T_Boltzmann is not None:
                 T_x_yi_z = self.T_Boltzmann(x=X,y=Y,z=Z)
-                partition_func = self.atom.Z(T_x_yi_z)
+                partition_func = self.mole.Z(T_x_yi_z)
                 upper_level_fraction = self.transition.up.LTE_level_pop(
                                                     Z=partition_func,T=T_x_yi_z)
                 lower_level_fraction = self.transition.low.LTE_level_pop(
@@ -226,8 +237,11 @@ class Raytracing():
             N1 = n_x_yi_z * lower_level_fraction * self.dy_sky[i]
             N2 = n_x_yi_z * upper_level_fraction * self.dy_sky[i]
             Delta_NU = self.NU - NU_los
-            tau_nu_i = self.transition.tau_nu(
-                               N1=N1,N2=N2,nu=self.transition.nu0+Delta_NU)
+            FWHM_nu = self.FWHM_v(x=X,y=Y,z=Z)*self.transition.nu0/constants.c
+            tau_nu_i = self.compute_tau_nu(N1=N1,N2=N2,nu=self.transition.nu0+Delta_NU,
+                                           FWHM_nu=FWHM_nu)
+            # tau_nu_i = self.transition.tau_nu(
+            #                    N1=N1,N2=N2,nu=self.transition.nu0+Delta_NU)
             if not self.allow_negative_tau:
                 assert np.all(tau_nu_i >= 0),\
                     'something strage is going on with the optical depth calculation:'+\
@@ -251,16 +265,7 @@ class Raytracing():
                 previous_tau_nu = self.tau_nu.copy()
             if self.verbose:
                 print('current maximum optical depth: {:g}'.format(np.max(self.tau_nu)))
-        # if self.zsym:
-        #     self.apply_zsym()
         self.spectrum = np.sum(self.dX_sky*self.dZ_sky*self.cube,axis=(0,1))#W/(m/s)/sr
-
-    # def apply_zsym(self):
-    #     self.z_sky = np.concatenate((-self.z_sky[:0:-1],self.z_sky),axis=0)
-    #     self.dz_sky = np.concatenate((self.dz_sky[:0:-1],self.dz_sky),axis=0)
-    #     self.dZ_sky = self.dz_sky[np.newaxis,:,np.newaxis]
-    #     self.cube = np.concatenate((self.cube[:,:0:-1,:],self.cube),axis=1)
-    #     self.tau_nu = np.concatenate((self.tau_nu[:,:0:-1,:],self.tau_nu),axis=1)
 
     def plot_X_Z_data(self,data,colorbar_label='',title=None):
         XX,ZZ = np.meshgrid(self.x_sky,self.z_sky,indexing='ij')
